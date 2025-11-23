@@ -7,8 +7,7 @@ import json
 # --- API Configuration ---
 
 # OpenRouter (Claude Haiku) Key
-openai_api_key = "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"
-openai.api_key = openai_api_key
+openai.api_key = os.getenv("OPENAI_API_KEY")
 openai.api_base = "https://openrouter.ai/api/v1"
 
 # --- Wikimedia Configuration ---
@@ -399,4 +398,5 @@ with analysis_col:
             st.markdown("---")
             st.markdown(analysis)
     else:
+
         st.info("Enter your players in the sidebar and click 'Analyze Dream Team'!")
