@@ -1,10 +1,12 @@
 import streamlit as st
 import requests
+import openai
 import os
-from openai import OpenAI
+import json
 
-# --- OpenAI Client Setup ---
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# --- API Configuration ---
+openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_base = "https://openrouter.ai/api/v1"
 
 # --- Wikimedia Configuration ---
 SEARCH_URL = "https://en.wikipedia.org/w/api.php"
@@ -64,45 +66,38 @@ def get_player_image_url(player_name):
         return DEFAULT_IMAGE
 
 def generate_analysis(formation, team):
-    """Generates tactical analysis using OpenAI 1.x Chat API."""
+    """Generates tactical analysis using the LLM."""
     team_str = "\n".join([f"{pos}: {name}" for pos, name in team.items()])
+    prompt = f"""You are a professional football analyst.
+Analyze this team's tactical profile for the {formation} formation.
 
-    prompt = f"""You are a professional football analyst and scout.
-Analyze this team's tactical profile based on the {formation} formation.
 Team Roster:
 {team_str}
 
-Provide your analysis in the following strict Markdown structure. Do not include any text before the first heading:
+Provide your analysis in Markdown:
 
 ## Strengths 💪
-* [Sharp point about a key advantage]
-* ...
+* [Your points]
 
 ## Weaknesses 🚧
-* [Sharp point about a potential liability]
-* ...
+* [Your points]
 
 ## Tactical Suggestions 🧠
-* [Concrete suggestion for the coach]
-* ...
+* [Your points]
 """
-
     try:
-        with st.spinner("🧠 Analyzing tactical structure... This may take a moment."):
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",  # Use a model available to your API key
-                messages=[
-                    {"role": "system", "content": "You are a professional football analyst."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.6
+        with st.spinner("🧠 Analyzing tactical structure..."):
+            response = openai.ChatCompletion.create(
+                model="anthropic/claude-3-haiku:beta",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.6,
+                timeout=20
             )
-
-        return response.choices[0].message.content
+        return response["choices"][0]["message"]["content"]
     except Exception as e:
         return f"ERROR: LLM Analysis failed: {str(e)}"
 
-# --- Player Positioning ---
+# --- Dynamic Positioning ---
 def get_player_positions(formation_name):
     positions = {"GK1": {"top": 15, "left": 50}}
     if formation_name in ["4-3-3", "4-4-2"]:
@@ -128,7 +123,7 @@ def get_player_positions(formation_name):
         positions.update({"ATT1": {"top": 75, "left": 40}, "ATT2": {"top": 75, "left": 60}})
     return positions
 
-# --- CSS & HTML ---
+# --- CSS & HTML Templates ---
 PITCH_CSS = f"""
 <style>
 .stApp {{ background: #e8f5e9; }}
@@ -144,7 +139,7 @@ h1, h2, h3 {{ color: #000 !important; }}
 """
 
 PLAYER_MARKER_TEMPLATE = """
-<div class="player-marker" style="top: {top}%; left: {left}%;>
+<div class="player-marker" style="top: {top}%; left: {left}%;">
     <div class="image-holder">
         <img src="{img_url}">
     </div>
@@ -172,7 +167,7 @@ with st.sidebar:
     for position_name, count in formation_rows:
         st.subheader(f"{position_name} ({count})")
         for i in range(count):
-            position_key = f"{position_name}{i+1}"
+            position_key = f"{position_name}{i + 1}"
             player_name = st.text_input(f"Player {i+1}:", key=f"input_{position_key}", placeholder=f"Enter {position_key} name")
             st.session_state.team[position_key] = player_name
 
