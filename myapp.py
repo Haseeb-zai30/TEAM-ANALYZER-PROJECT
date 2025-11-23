@@ -1,12 +1,10 @@
 import streamlit as st
 import requests
-import openai
 import os
-import json
+from openai import OpenAI
 
-# --- API Configuration ---
-openai.api_key = os.getenv("OPENAI_API_KEY")
-openai.api_base = "https://openrouter.ai/api/v1"
+# --- OpenAI Client Setup ---
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # --- Wikimedia Configuration ---
 SEARCH_URL = "https://en.wikipedia.org/w/api.php"
@@ -66,7 +64,7 @@ def get_player_image_url(player_name):
         return DEFAULT_IMAGE
 
 def generate_analysis(formation, team):
-    """Generates tactical analysis using the new OpenAI 1.x Chat API."""
+    """Generates tactical analysis using OpenAI 1.x Chat API."""
     team_str = "\n".join([f"{pos}: {name}" for pos, name in team.items()])
 
     prompt = f"""You are a professional football analyst and scout.
@@ -92,20 +90,19 @@ Provide your analysis in the following strict Markdown structure. Do not include
     try:
         with st.spinner("🧠 Analyzing tactical structure... This may take a moment."):
             response = client.chat.completions.create(
-                model="gpt-4o-mini",  # or another available model
+                model="gpt-4o-mini",  # Use a model available to your API key
                 messages=[
                     {"role": "system", "content": "You are a professional football analyst."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.6,
+                temperature=0.6
             )
 
-        # Extract the text from the response
         return response.choices[0].message.content
-
     except Exception as e:
         return f"ERROR: LLM Analysis failed: {str(e)}"
-# --- Dynamic Positioning ---
+
+# --- Player Positioning ---
 def get_player_positions(formation_name):
     positions = {"GK1": {"top": 15, "left": 50}}
     if formation_name in ["4-3-3", "4-4-2"]:
@@ -131,7 +128,7 @@ def get_player_positions(formation_name):
         positions.update({"ATT1": {"top": 75, "left": 40}, "ATT2": {"top": 75, "left": 60}})
     return positions
 
-# --- CSS & HTML Templates ---
+# --- CSS & HTML ---
 PITCH_CSS = f"""
 <style>
 .stApp {{ background: #e8f5e9; }}
@@ -147,7 +144,7 @@ h1, h2, h3 {{ color: #000 !important; }}
 """
 
 PLAYER_MARKER_TEMPLATE = """
-<div class="player-marker" style="top: {top}%; left: {left}%;">
+<div class="player-marker" style="top: {top}%; left: {left}%;>
     <div class="image-holder">
         <img src="{img_url}">
     </div>
@@ -175,7 +172,7 @@ with st.sidebar:
     for position_name, count in formation_rows:
         st.subheader(f"{position_name} ({count})")
         for i in range(count):
-            position_key = f"{position_name}{i + 1}"
+            position_key = f"{position_name}{i+1}"
             player_name = st.text_input(f"Player {i+1}:", key=f"input_{position_key}", placeholder=f"Enter {position_key} name")
             st.session_state.team[position_key] = player_name
 
@@ -215,4 +212,3 @@ with analysis_col:
             st.markdown(analysis)
     else:
         st.info("Enter your players in the sidebar and click 'Analyze Dream Team'!")
-
