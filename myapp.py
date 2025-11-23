@@ -39,6 +39,9 @@ FORMATIONS = {
 }
 
 DEFAULT_IMAGE = "https://cdn-icons-png.flaticon.com/512/3673/3673323.png"
+# NOTE: Using the direct URL here, but for deployment, the image_96ca66.jpg 
+# file must be present in the repository root if you want to use a local file 
+# instead of the remote pitch image URL.
 PITCH_IMAGE_URL = "https://upload.wikimedia.org/wikipedia/commons/4/4e/Football_pitch.svg"
 
 
@@ -282,7 +285,7 @@ h1, h2, h3 {{
     font-size: 14px;
 }}
 
-/* NEW: Style for all text within the Tactical Analysis Output container */
+/* Style for all text within the Tactical Analysis Output container */
 #analysis-content, #analysis-content h2, #analysis-content li, #analysis-content p {{
     color: #000000 !important; /* Force all analysis output text to be black */
 }}
@@ -309,6 +312,21 @@ st.set_page_config(
 
 st.markdown(PITCH_CSS, unsafe_allow_html=True)
 st.title("⚽ Dream Team Analyzer")
+
+# --- NEW BUTTONS SECTION ---
+st.markdown("---")
+button_col1, button_col2 = st.columns(2)
+
+with button_col1:
+    if st.button("👥 Local Players", use_container_width=True, key="btn_local"):
+        st.info("Loading Local Player Data... (Feature Placeholder)")
+
+with button_col2:
+    if st.button("🎬 Video Analysis", use_container_width=True, key="btn_video"):
+        st.info("Initiating Video Analysis Tool... (Feature Placeholder)")
+
+st.markdown("---")
+# ---------------------------
 
 # Initialize session state variables
 if 'team' not in st.session_state:
