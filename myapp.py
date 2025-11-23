@@ -65,37 +65,52 @@ def get_player_image_url(player_name):
     except Exception:
         return DEFAULT_IMAGE
 
-def generate_analysis(formation, team):
-    """Generates tactical analysis using the LLM."""
-    team_str = "\n".join([f"{pos}: {name}" for pos, name in team.items()])
-    prompt = f"""You are a professional football analyst.
-Analyze this team's tactical profile for the {formation} formation.
+# --- LLM Analysis Function (Updated for openai V1.x.x) ---
 
+def generate_analysis(formation, team):
+    """Generates tactical analysis using the LLM (Claude-3 Haiku) using V1 syntax."""
+    team_str = "\n".join([f"{pos}: {name}" for pos, name in team.items()])
+
+    prompt = f"""You are a professional football analyst and scout.
+Analyze this team's tactical profile based on the {formation} formation.
 Team Roster:
 {team_str}
 
-Provide your analysis in Markdown:
+Provide your analysis in the following strict Markdown structure. Do not include any text before the first heading:
 
 ## Strengths 💪
-* [Your points]
+* [Sharp point about a key advantage]
+* ...
 
 ## Weaknesses 🚧
-* [Your points]
+* [Sharp point about a potential liability]
+* ...
 
 ## Tactical Suggestions 🧠
-* [Your points]
+* [Concrete suggestion for the coach]
+* ...
 """
     try:
-        with st.spinner("🧠 Analyzing tactical structure..."):
-            response = openai.ChatCompletion.create(
+        # 1. Initialize the client (Client must be created first in V1)
+        client = openai.OpenAI(
+            api_key=st.secrets["OPENROUTER_API_KEY"], 
+            base_url="https://openrouter.ai/api/v1",
+        )
+        
+        with st.spinner("🧠 Analyzing tactical structure... This may take a moment."):
+            # 2. Use the new .chat.completions.create method
+            response = client.chat.completions.create(
                 model="anthropic/claude-3-haiku:beta",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.6,
                 timeout=20
             )
-        return response["choices"][0]["message"]["content"]
+            # 3. Access the content using the new response structure
+        return response.choices[0].message.content
+        
     except Exception as e:
-        return f"ERROR: LLM Analysis failed: {str(e)}"
+        # This will catch any remaining network or API-specific errors
+        return f"ERROR: LLM Analysis failed: {type(e).__name__}: {str(e)}"
 
 # --- Dynamic Positioning ---
 def get_player_positions(formation_name):
@@ -207,3 +222,4 @@ with analysis_col:
             st.markdown(analysis)
     else:
         st.info("Enter your players in the sidebar and click 'Analyze Dream Team'!")
+
