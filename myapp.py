@@ -3,10 +3,11 @@ import requests
 import openai
 import os
 import json
+import pandas as pd
 
 # --- API Configuration ---
 
-# The key is now retrieved from Streamlit secrets (Mandatory for deployment)
+# The key is retrieved from Streamlit secrets (Mandatory for deployment)
 try:
     openai_api_key = st.secrets["OPENROUTER_API_KEY"]
 except KeyError:
@@ -40,7 +41,54 @@ DEFAULT_IMAGE = "https://cdn-icons-png.flaticon.com/512/3673/3673323.png"
 PITCH_IMAGE_URL = "https://upload.wikimedia.org/wikipedia/commons/4/4e/Football_pitch.svg"
 
 
-# --- LLM Analysis Function (V1 Syntax) ---
+# ====================================================================
+# --- UTILITY FUNCTIONS (Defined first to prevent NameError) ---
+# ====================================================================
+
+@st.cache_data(ttl=3600)
+def get_player_image_url(player_name):
+    """
+    Fetches player image URL from Wikipedia/Wikimedia Commons.
+    This function MUST be defined before the pitch calls it.
+    """
+    if not player_name:
+        return DEFAULT_IMAGE
+
+    search_params = {
+        "action": "query", "list": "search", "srsearch": f"{player_name} footballer", "format": "json"
+    }
+
+    try:
+        response = requests.get(SEARCH_URL, params=search_params, headers=HEADERS)
+        response.raise_for_status()
+        data = response.json()
+
+        results = data.get("query", {}).get("search", [])
+        if not results:
+            return DEFAULT_IMAGE
+
+        page_title = results[0]["title"]
+
+        image_params = {
+            "action": "query", "format": "json", "titles": page_title,
+            "prop": "pageimages", "pithumbsize": 200, "pilicense": "any"
+        }
+
+        image_response = requests.get(SEARCH_URL, params=image_params, headers=HEADERS)
+        image_response.raise_for_status()
+        image_data = image_response.json()
+
+        pages = image_data.get("query", {}).get("pages", {})
+
+        for page in pages.values():
+            if "thumbnail" in page:
+                return page["thumbnail"]["source"]
+
+        return DEFAULT_IMAGE
+
+    except Exception:
+        return DEFAULT_IMAGE
+
 
 def generate_analysis(formation, team):
     """Generates tactical analysis using the LLM (Claude-3 Haiku) using V1 syntax."""
@@ -66,6 +114,7 @@ Provide your analysis in the following strict Markdown structure. Do not include
 * ...
 """
     try:
+        # V1 Syntax: Initialize the client inside the function
         client = openai.OpenAI(
             api_key=st.secrets["OPENROUTER_API_KEY"], 
             base_url="https://openrouter.ai/api/v1",
@@ -83,7 +132,6 @@ Provide your analysis in the following strict Markdown structure. Do not include
     except Exception as e:
         return f"ERROR: LLM Analysis failed: {type(e).__name__}: {str(e)}"
 
-# --- Dataframe for Local Players ---
 
 def show_local_players_input():
     """
@@ -96,18 +144,18 @@ def show_local_players_input():
     if 'local_players_df' not in st.session_state:
         # Define the structure for local players
         default_data = {
-            'Name': ['New Player 1', 'New Player 2'],
-            'Position': ['MID', 'ATT'],
+            'Name': ['Local Striker', 'Local Midfielder'],
+            'Position': ['ATT', 'MID'],
             'Picture URL': [DEFAULT_IMAGE, DEFAULT_IMAGE],
-            'Pace (0-100)': [85, 90],
-            'Passing (0-100)': [80, 70],
-            'Stamina (0-100)': [90, 80],
-            'Awareness (0-100)': [85, 75],
-            'Tackling (0-100)': [50, 20],
+            'Pace (0-100)': [90, 80],
+            'Passing (0-100)': [70, 85],
+            'Stamina (0-100)': [80, 90],
+            'Awareness (0-100)': [75, 88],
+            'Tackling (0-100)': [30, 70],
         }
-        st.session_state.local_players_df = default_data
+        st.session_state.local_players_df = pd.DataFrame(default_data)
 
-    st.info("Edit the table below to define the stats for your custom players. This data can be used in analysis later!")
+    st.info("Edit the table below to define the stats for your custom players. You can copy/paste image URLs.")
     
     # Use data editor to allow user input
     edited_df = st.data_editor(
@@ -137,11 +185,8 @@ def show_local_players_input():
     st.success(f"💾 {len(edited_df)} custom players defined.")
 
 
-# --- Dynamic Positioning Logic (Existing code, unchanged) ---
-
-@st.cache_data(ttl=3600)
 def get_player_positions(formation_name):
-    # ... (Your existing get_player_positions function here)
+    """Returns a dictionary of absolute positioning percentages for a given formation."""
     positions = {
         "GK1": {"top": 15, "left": 50},
     }
@@ -207,7 +252,9 @@ def get_player_positions(formation_name):
     return positions
 
 
-# --- PITCH HTML & CSS INJECTION (Existing code, unchanged) ---
+# ====================================================================
+# --- PITCH HTML & CSS INJECTION ---
+# ====================================================================
 
 PITCH_CSS = f"""
 <style>
@@ -219,7 +266,7 @@ PITCH_CSS = f"""
 
 /* Main headers (h1, h2, h3) - Targeted for BLACK text */
 h1, h2, h3 {{ 
-    color: #000 !important; /* Deep black for titles and section headers */
+    color: #000 !important;
 }}
 
 /* Button Styling */
@@ -307,7 +354,9 @@ PLAYER_MARKER_TEMPLATE = """
 </div>
 """
 
-# --- Streamlit UI Layout ---
+# ====================================================================
+# --- STREAMLIT UI LAYOUT ---
+# ====================================================================
 
 st.set_page_config(
     page_title="Dream Team Analyzer",
@@ -323,7 +372,6 @@ if 'team' not in st.session_state:
     st.session_state.team = {}
 if 'run_analysis' not in st.session_state:
     st.session_state.run_analysis = False
-# NEW: State to manage the main content view (analysis or local player input)
 if 'view_mode' not in st.session_state:
     st.session_state.view_mode = 'analysis' 
 
@@ -335,21 +383,19 @@ button_col1, button_col2 = st.columns(2)
 with button_col1:
     if st.button("👥 Local Players", use_container_width=True, key="btn_local"):
         st.session_state.view_mode = 'local_players'
-        # Reset analysis state when switching view
         st.session_state.run_analysis = False 
         st.rerun()
 
 with button_col2:
     if st.button("🎬 Video Analysis", use_container_width=True, key="btn_video"):
         st.info("Initiating Video Analysis Tool... (Feature Placeholder)")
-        # Switch to analysis view if the user decides to implement this later
         st.session_state.view_mode = 'analysis' 
         st.rerun()
 
 st.markdown("---")
 # ---------------------------
 
-# --- Sidebar for Player Inputs (Existing code, unchanged) ---
+# --- Sidebar for Player Inputs ---
 with st.sidebar:
     st.header("📋 Enter Your Dream Team")
     selected_formation = st.selectbox(
@@ -379,10 +425,9 @@ with st.sidebar:
     # Analysis Button
     if st.button("🔍 Analyze Dream Team", key="analyze_button_sidebar"):
         st.session_state.run_analysis = True
-        st.session_state.view_mode = 'analysis' # Ensure we switch back to analysis view
+        st.session_state.view_mode = 'analysis' 
         st.rerun()
     else:
-        # Only reset run_analysis if the button wasn't just clicked
         if not st.session_state.run_analysis:
             st.session_state.run_analysis = False
 
@@ -402,8 +447,10 @@ with pitch_col:
     for position_key in formation_slots:
         player_name = st.session_state.team.get(position_key, "")
         display_name = player_name if player_name else position_key
-        # For simplicity, still using Wikimedia fetch, but you could integrate local player pics here
+        
+        # This line is now safe because get_player_image_url is defined above
         img_url = get_player_image_url(player_name) if player_name else DEFAULT_IMAGE
+        
         pos_data = positions.get(position_key, {"top": 50, "left": 50})
 
         marker_html = PLAYER_MARKER_TEMPLATE.format(
@@ -419,10 +466,9 @@ with pitch_col:
 with analysis_col:
     
     if st.session_state.view_mode == 'local_players':
-        # New function call when 'Local Players' button is clicked
         show_local_players_input()
     
-    else: # st.session_state.view_mode == 'analysis' (Default or after clicking Analyze)
+    else: # st.session_state.view_mode == 'analysis' 
         st.header("Tactical Analysis")
         if st.session_state.run_analysis:
 
