@@ -66,37 +66,45 @@ def get_player_image_url(player_name):
         return DEFAULT_IMAGE
 
 def generate_analysis(formation, team):
-    """Generates tactical analysis using the LLM."""
+    """Generates tactical analysis using the new OpenAI 1.x Chat API."""
     team_str = "\n".join([f"{pos}: {name}" for pos, name in team.items()])
-    prompt = f"""You are a professional football analyst.
-Analyze this team's tactical profile for the {formation} formation.
 
+    prompt = f"""You are a professional football analyst and scout.
+Analyze this team's tactical profile based on the {formation} formation.
 Team Roster:
 {team_str}
 
-Provide your analysis in Markdown:
+Provide your analysis in the following strict Markdown structure. Do not include any text before the first heading:
 
 ## Strengths 💪
-* [Your points]
+* [Sharp point about a key advantage]
+* ...
 
 ## Weaknesses 🚧
-* [Your points]
+* [Sharp point about a potential liability]
+* ...
 
 ## Tactical Suggestions 🧠
-* [Your points]
+* [Concrete suggestion for the coach]
+* ...
 """
+
     try:
-        with st.spinner("🧠 Analyzing tactical structure..."):
-            response = openai.ChatCompletion.create(
-                model="anthropic/claude-3-haiku:beta",
-                messages=[{"role": "user", "content": prompt}],
+        with st.spinner("🧠 Analyzing tactical structure... This may take a moment."):
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",  # or another available model
+                messages=[
+                    {"role": "system", "content": "You are a professional football analyst."},
+                    {"role": "user", "content": prompt}
+                ],
                 temperature=0.6,
-                timeout=20
             )
-        return response["choices"][0]["message"]["content"]
+
+        # Extract the text from the response
+        return response.choices[0].message.content
+
     except Exception as e:
         return f"ERROR: LLM Analysis failed: {str(e)}"
-
 # --- Dynamic Positioning ---
 def get_player_positions(formation_name):
     positions = {"GK1": {"top": 15, "left": 50}}
@@ -207,3 +215,4 @@ with analysis_col:
             st.markdown(analysis)
     else:
         st.info("Enter your players in the sidebar and click 'Analyze Dream Team'!")
+
